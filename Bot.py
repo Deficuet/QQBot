@@ -14,7 +14,7 @@ from graia.broadcast.entities.event                 import BaseEvent
 from graia.broadcast.entities.dispatcher            import BaseDispatcher
 from graia.broadcast.interfaces.dispatcher          import DispatcherInterface
 from aiohttp.client_exceptions                      import ClientResponseError
-from PixivData                                      import IllustrationSet, ALIllustSet
+from PixivData                                      import IllustrationSet, ALIllustSet, CopperSet
 
 import datetime as dt
 import threading
@@ -95,12 +95,13 @@ class LectureEvent(BaseEvent):
             return
 @broadcastControl.receiver(LectureEvent)
 async def LectureNotice():
-    await botApp.sendGroupMessage(Values.MAIN_GROUP.value, MessageChain.create([AtAll(), Plain(f" {'大讲堂' * 3}\n小心欧宅（）")]))
+    #await botApp.sendGroupMessage(Values.MAIN_GROUP.value, MessageChain.create([AtAll(), Plain(f" {'大讲堂' * 3}\n小心欧宅（）")]))
+    await botApp.sendGroupMessage(Values.MAIN_GROUP.value, MessageChain.create([Plain(f"{'大讲堂' * 3}\n小心欧宅（）")]))
 def LectureTimer(targetTime: dt.time):
     presDatetime = dt.datetime.now(UTC(8))
     dayDiff = 5 - presDatetime.weekday()
     modiDiff = dayDiff if dayDiff >= 0 else 6
-    modiDiff = 7 if dayDiff == 0 and (dt.datetime.combine(presDatetime, targetTime) - presDatetime).days == -1 else modiDiff
+    modiDiff = 7 if dayDiff == 0 and (dt.datetime.combine(presDatetime, targetTime) - dt.datetime.combine(presDatetime, presDatetime.time())).days == -1 else modiDiff
     targetDate = presDatetime.date() + dt.timedelta(days = modiDiff)
     targetDatetime = dt.datetime.combine(targetDate, targetTime)
     print(targetDatetime)
@@ -131,7 +132,7 @@ def ModifiedGetMethod(func):
             info = func()
         except Exception as e:
             print(e)
-            time.sleep(30)
+            time.sleep(60)
         else:
             break
     return info
@@ -141,7 +142,7 @@ async def SendIllust():
     while True:
         try:
             await info[3].sendGroupMessage(info[2], MessageChain.create([Image.fromLocalFile(info[1]), Plain(f'https://www.pixiv.net/artworks/{info[0]}')]))
-        except ClientResponseError:
+        except:
             pass
         else:
             break
@@ -149,10 +150,15 @@ async def SendIllust():
 @broadcastControl.receiver('GroupMessage', dispatchers = [Kanata([RegexMatch('^(I|i)llust.*')])])
 async def IllustHandler(message: MessageChain, group: Group, bot: GraiaMiraiApplication):
     param = regex.split('(I|i)llust', message.asDisplay())[-1]
-    if not regex.match('^ (A|a)(L|l)$', param):
-        alterSet = IllustrationSet.copy()
-    else:
+    if regex.match('^ (A|a)(L|l)$', param):
         alterSet = ALIllustSet.copy()
+        print('Set = AL')
+    elif regex.match('^ (C|c)(U|u)$', param):
+        alterSet = CopperSet.copy()
+        print('Set = Cu')
+    else:
+        alterSet = IllustrationSet.copy()
+        print('Set = Default')
     LocalRandom = random.Random()
     LocalRandom.seed((dt.datetime.now().microsecond << 4) + LOWER_SEED)
     illustID = LocalRandom.choice(tuple(alterSet))
@@ -167,6 +173,7 @@ async def IllustHandler(message: MessageChain, group: Group, bot: GraiaMiraiAppl
     await SendIllust()
 LOWER_SEED = random.randint(1, 2 ** 31 - 1)
 print(LOWER_SEED)
+print(len(IllustrationSet), len(ALIllustSet), len(CopperSet))
 CACHE_PATH = './cache'
 IMAGE_PATH = f'{CACHE_PATH}/Image'
 if not os.path.exists(CACHE_PATH): os.mkdir(CACHE_PATH)
