@@ -13,7 +13,6 @@ from graia.application.group                        import Group, Member
 from graia.broadcast.entities.event                 import BaseEvent
 from graia.broadcast.entities.dispatcher            import BaseDispatcher
 from graia.broadcast.interfaces.dispatcher          import DispatcherInterface
-from aiohttp.client_exceptions                      import ClientResponseError
 from PixivData                                      import IllustrationSet, ALIllustSet, CopperSet
 
 import datetime as dt
