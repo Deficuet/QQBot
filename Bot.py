@@ -2,13 +2,13 @@ from typing                                         import Any
 from pathlib                                        import Path
 from BasicValues                                    import Values
 from shutil                                         import rmtree
-from pixivapi                                       import Client, Size, errors
+from pixivapi                                       import Client, Size, errors, ContentType
 from graia.broadcast                                import Broadcast
 from graia.application                              import GraiaMiraiApplication, Session
 from graia.application.message.parser.kanata        import Kanata
 from graia.application.message.parser.signature     import RegexMatch, RequireParam, FullMatch
 from graia.application.message.chain                import MessageChain
-from graia.application.message.elements.internal    import Plain, At, AtAll, Source, Image
+from graia.application.message.elements.internal    import Plain, At, Source, Image
 from graia.application.group                        import Group, Member
 from graia.broadcast.entities.event                 import BaseEvent
 from graia.broadcast.entities.dispatcher            import BaseDispatcher
@@ -135,6 +135,14 @@ def ModifiedGetMethod(func):
         else:
             break
     return info
+def IllustValidator(illust):
+    return False if set([tag.get('name') for tag in illust.tags]).intersection(Values.HIDDEN_ILLUST_TAGS.value) or illust.type != ContentType.ILLUSTRATION else True
+def RecommendedIllust():
+    while True:
+        illustList = [illust.id for illust in ModifiedGetMethod(lambda: pixivClient.fetch_illustrations_recommended()).get('illustrations') if illust.total_bookmarks >= 2500 and IllustValidator(illust)]
+        if illustList:
+            break
+    return set(illustList)
 async def SendIllust():
     info = await illustQueue.get()
     print(f'Sending {repr(info)}')
@@ -155,6 +163,9 @@ async def IllustHandler(message: MessageChain, group: Group, bot: GraiaMiraiAppl
     elif regex.match('^ (C|c)(U|u)$', param):
         alterSet = CopperSet.copy()
         print('Set = Cu')
+    elif regex.match('^ (R|r)(E|e)(C|c)', param):
+        alterSet = RecommendedIllust()
+        print('Set = Rec')
     else:
         alterSet = IllustrationSet.copy()
         print('Set = Default')
