@@ -163,9 +163,9 @@ async def IllustHandler(message: MessageChain, group: Group, bot: GraiaMiraiAppl
     elif regex.match('^ (C|c)(U|u)$', param):
         alterSet = CopperSet.copy()
         print('Set = Cu')
-    elif regex.match('^ (R|r)(E|e)(C|c)', param):
+    elif regex.match('^ (R|r)(E|e)(C|c)$', param):
         alterSet = RecommendedIllust()
-        print('Set = Rec')
+        print('Set = Recommended')
     else:
         alterSet = IllustrationSet.copy()
         print('Set = Default')
