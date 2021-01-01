@@ -48,7 +48,7 @@ def ImageDownload(src, des):
         pic.write(imgData.content)
     return fileName
 def RegExMultiPattern(patternList, string):
-    return True if [True for pattern in patternList if regex.match(pattern, string)] else False
+    return True if regex.match('^((?!自碧蓝航线上线以来)(.|\n))*$', string) and [True for pattern in patternList if regex.match(pattern, string)] else False
 def GetDynamicInfo(kwDict, keyList):
     def CheckDict(Dict, keys):
         try:
@@ -103,14 +103,14 @@ def MonitorDynamic():
         dynamicInfo = [GetDynamicInfo(dynamic, keys) for keys in BILI_DYNAMIC_KEYS]
         if dynamicInfo[0]:
             if RegExMultiPattern(TEXT_IMAGE_PATTERN, dynamicInfo[0][0]):
-                botBroadcast.postEvent(BiliDynamicEvent(MessageChain.create([Plain(dynamicInfo[0][0])] + [ImageQQ.fromLocalFile(ImageDownload(imgInfo['img_src'], BILI_ASSET_PATH)) for imgInfo in dynamicInfo[0][1]])))
+                botBroadcast.postEvent(BiliDynamicEvent(MessageChain.create([Plain(dynamicInfo[0][0])] + [ImageQQ.fromLocalFile(ImageDownload(imgInfo['img_src'], BILI_ASSET_PATH)) for imgInfo in dynamicInfo[0][1]] + [Plain(f'\n原动态链接：https://t.bilibili.com/{dynamicID}?tab=2')])))
         elif dynamicInfo[1]:
-            if regex.match('(.|\n)*各位亲爱的指挥官(.|\n)+', dynamicInfo[1][0]):
-                botBroadcast.postEvent(BiliDynamicEvent(MessageChain.create([Plain(dynamicInfo[1][0])])))
+            if RegExMultiPattern(['(.|\n)*各位亲爱的指挥官(.|\n)+'], dynamicInfo[1][0]):
+                botBroadcast.postEvent(BiliDynamicEvent(MessageChain.create([Plain(f'{dynamicInfo[1][0]}\n原动态链接：https://t.bilibili.com/{dynamicID}?tab=2')])))
         elif dynamicInfo[2]:
-            botBroadcast.postEvent(BiliDynamicEvent(MessageChain.create([ImageQQ.fromLocalFile(ImageDownload(imgsrc, BILI_ASSET_PATH)) for imgsrc in dynamicInfo[2][0]] + [Plain(f'来自小加加的专栏：\n{dynamicInfo[2][1]}\nhttps://www.bilibili.com/read/cv{dynamicInfo[2][2]}')])))
+            botBroadcast.postEvent(BiliDynamicEvent(MessageChain.create([ImageQQ.fromLocalFile(ImageDownload(imgsrc, BILI_ASSET_PATH)) for imgsrc in dynamicInfo[2][0]] + [Plain(f'来自小加加的专栏：\n{dynamicInfo[2][1]}\nhttps://www.bilibili.com/read/cv{dynamicInfo[2][2]}\n原动态链接：https://t.bilibili.com/{dynamicID}?tab=2')])))
         elif dynamicInfo[3]:
-            botBroadcast.postEvent(BiliDynamicEvent(MessageChain.create([ImageQQ.fromLocalFile(ImageDownload(dynamicInfo[3][0], BILI_ASSET_PATH)), Plain(f'来自小加加的视频：\n{dynamicInfo[3][1]}\nhttps://www.bilibili.com/video/{dynamicInfo[3][2]}')])))
+            botBroadcast.postEvent(BiliDynamicEvent(MessageChain.create([ImageQQ.fromLocalFile(ImageDownload(dynamicInfo[3][0], BILI_ASSET_PATH)), Plain(f'来自小加加的视频：\n{dynamicInfo[3][1]}\nhttps://www.bilibili.com/video/{dynamicInfo[3][2]}\n原动态链接：https://t.bilibili.com/{dynamicID}?tab=2')])))
     
 BILI_VERIFY = Verify(Values.BILI_SESSDATA.value, Values.BILI_CSRF.value)
 CACHE_PATH = './cache'
@@ -122,9 +122,12 @@ BILI_DYNAMIC_KEYS = [
     [['card', 'pic'], ['card', 'title'], ['desc', 'bvid']]
 ]
 TEXT_IMAGE_PATTERN = [
-    '#碧蓝航线# \n.+换装(【|「).+(」|】)参上(.|\n)*',
+    '#碧蓝航线# #舰船新增# (.|\n)+',
+    '#碧蓝航线# \n(.|\n)+换装(【|「)(.|\n)+(」|】)参上(.|\n)*',
+    '#碧蓝航线# \n(.|\n)+(【|「)(.|\n)+(」|】)改造即将开启！(.|\n)*',
+    '(.|\n)+<该誓约立绘将于下次维护后实装>(.|\n)*',
     '#碧蓝航线# \n◆Live2D预览◆(.|\n)*',
-    '#碧蓝航线# #舰船新增# (.|\n)+'
+    '(.|\n)*各位亲爱的指挥官(.|\n)+'
 ]
 if not os.path.exists(CACHE_PATH): os.mkdir(CACHE_PATH)
 if not os.path.exists(BILI_ASSET_PATH):
