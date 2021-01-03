@@ -1,4 +1,4 @@
-from typing                                         import Any
+from typing                                         import Any, List, Union
 from shutil                                         import rmtree
 from bilibili_api                                   import user, Verify
 from graia.broadcast                                import Broadcast
@@ -7,7 +7,7 @@ from graia.broadcast.entities.dispatcher            import BaseDispatcher
 from graia.broadcast.interfaces.dispatcher          import DispatcherInterface
 from graia.application                              import GraiaMiraiApplication, Session
 from graia.application.message.chain                import MessageChain
-from graia.application.message.elements.internal    import Plain, Image as ImageQQ
+from graia.application.message.elements.internal    import Plain, Image as ImageQQ, Xml
 from BasicValues                                    import Values
 
 import threading
@@ -48,7 +48,7 @@ def ImageDownload(src, des):
         pic.write(imgData.content)
     return fileName
 def RegExMultiPattern(patternList, string):
-    return True if regex.match('^((?!自碧蓝航线上线以来)(.|\n))*$', string) and [True for pattern in patternList if regex.match(pattern, string)] else False
+    return True if VERIFY_PATTERN.match(string) and [True for pattern in patternList if pattern.match(string)] else False
 def GetDynamicInfo(kwDict, keyList):
     def CheckDict(Dict, keys):
         try:
@@ -60,7 +60,7 @@ def GetDynamicInfo(kwDict, keyList):
     values = [CheckDict(kwDict, key) for key in keyList]
     return [] if False in values or None in values else values
 class BiliDynamicEvent(BaseEvent):
-    dynamicInfo: MessageChain
+    dynamicInfo: Union[List[MessageChain], MessageChain]
     def __init__(self, dynamicInfo) -> None:
         super().__init__(dynamicInfo = dynamicInfo)
     class Dispatcher(BaseDispatcher):
@@ -77,58 +77,61 @@ def GetLastDynamic(uid, verify):
             return dynamic
 @botBroadcast.receiver(BiliDynamicEvent)
 async def SendDynamic(event: BiliDynamicEvent):
-    while True:
-        try:
-            await botApp.sendGroupMessage(Values.MAIN_GROUP.value, event.dynamicInfo)
-        except:
-            pass
-        else:
-            break
+    if isinstance(event.dynamicInfo, list):
+        for chain in event.dynamicInfo:
+            while True:
+                try:
+                    await botApp.sendGroupMessage(Values.MAIN_GROUP.value, chain)
+                except:
+                    pass
+                else:
+                    break
+    else:
+        while True:
+            try:
+                await botApp.sendGroupMessage(Values.MAIN_GROUP.value, event.dynamicInfo)
+            except:
+                pass
+            else:
+                break
 def MonitorDynamic():
     def EditConfig(dynamicID):
         configs['biliLastDynamicID'] = dynamicID
         with open('BotConfigs.yml', 'w', encoding = 'utf-8') as configFile:
             yaml.safe_dump(configs, configFile, allow_unicode = True, sort_keys = False)
-    dynamicInit = GetLastDynamic(Values.BILI_USER_ID.value, BILI_VERIFY)
-    dynamicInitID = GetDynamicInfo(dynamicInit, [['desc', 'dynamic_id']])[0]
-    EditConfig(dynamicInitID)
+    EditConfig(GetDynamicInfo(GetLastDynamic(Values.BILI_USER_ID.value, BILI_VERIFY), [['desc', 'dynamic_id']])[0])
     while True:
         while True:
             dynamic = GetLastDynamic(Values.BILI_USER_ID.value, BILI_VERIFY)
             dynamicID = GetDynamicInfo(dynamic, [['desc', 'dynamic_id']])[0]
-            if dynamicID != configs['biliLastDynamicID']:
+            if dynamicID > configs['biliLastDynamicID']:
                 EditConfig(dynamicID)
                 break
             time.sleep(15)
-        dynamicInfo = [GetDynamicInfo(dynamic, keys) for keys in BILI_DYNAMIC_KEYS]
-        if dynamicInfo[0]:
-            if RegExMultiPattern(TEXT_IMAGE_PATTERN, dynamicInfo[0][0]):
-                botBroadcast.postEvent(BiliDynamicEvent(MessageChain.create([Plain(dynamicInfo[0][0])] + [ImageQQ.fromLocalFile(ImageDownload(imgInfo['img_src'], BILI_ASSET_PATH)) for imgInfo in dynamicInfo[0][1]] + [Plain(f'\n原动态链接：https://t.bilibili.com/{dynamicID}?tab=2')])))
-        elif dynamicInfo[1]:
-            if RegExMultiPattern(['(.|\n)*各位亲爱的指挥官(.|\n)+'], dynamicInfo[1][0]):
-                botBroadcast.postEvent(BiliDynamicEvent(MessageChain.create([Plain(f'{dynamicInfo[1][0]}\n原动态链接：https://t.bilibili.com/{dynamicID}?tab=2')])))
-        elif dynamicInfo[2]:
-            botBroadcast.postEvent(BiliDynamicEvent(MessageChain.create([ImageQQ.fromLocalFile(ImageDownload(imgsrc, BILI_ASSET_PATH)) for imgsrc in dynamicInfo[2][0]] + [Plain(f'来自小加加的专栏：\n{dynamicInfo[2][1]}\nhttps://www.bilibili.com/read/cv{dynamicInfo[2][2]}\n原动态链接：https://t.bilibili.com/{dynamicID}?tab=2')])))
-        elif dynamicInfo[3]:
-            botBroadcast.postEvent(BiliDynamicEvent(MessageChain.create([ImageQQ.fromLocalFile(ImageDownload(dynamicInfo[3][0], BILI_ASSET_PATH)), Plain(f'来自小加加的视频：\n{dynamicInfo[3][1]}\nhttps://www.bilibili.com/video/{dynamicInfo[3][2]}\n原动态链接：https://t.bilibili.com/{dynamicID}?tab=2')])))
+        if dynamicInfo := GetDynamicInfo(dynamic, [['card', 'item', 'description'], ['card', 'item', 'pictures']]):
+            if RegExMultiPattern(TEXT_IMAGE_PATTERN, dynamicInfo[0]):
+                botBroadcast.postEvent(BiliDynamicEvent(MessageChain.create([Plain(dynamicInfo[0])] + [ImageQQ.fromLocalFile(ImageDownload(imgInfo['img_src'], BILI_ASSET_PATH)) for imgInfo in dynamicInfo[1]] + [Plain(f'\n原动态链接：https://t.bilibili.com/{dynamicID}?tab=2')])))
+        elif dynamicInfo := GetDynamicInfo(dynamic, [['card', 'item', 'content']]):
+            if VERIFY_PATTERN.match(dynamicInfo[0]):
+                botBroadcast.postEvent(BiliDynamicEvent(MessageChain.create([Plain(f'{dynamicInfo[0]}\n原动态链接：https://t.bilibili.com/{dynamicID}?tab=2')])))
+        elif dynamicInfo := GetDynamicInfo(dynamic, [['card', 'image_urls'], ['card', 'title'], ['card', 'id']]):
+            botBroadcast.postEvent(BiliDynamicEvent([MessageChain.create([ImageQQ.fromLocalFile(ImageDownload(imgsrc, BILI_ASSET_PATH)) for imgsrc in dynamicInfo[0]] + [Plain(f'来自小加加的专栏：\n{dynamicInfo[1]}\nhttps://www.bilibili.com/read/cv{dynamicInfo[2]}')]), MessageChain.create([Xml(VIDEO_ARTICAL_XML.format(url = f'https://www.bilibili.com/read/cv{dynamicInfo[2]}', cover = dynamicInfo[0][0], title = dynamicInfo[1], type = '专栏'))])]))
+        elif dynamicInfo := GetDynamicInfo(dynamic, [['card', 'pic'], ['card', 'title'], ['desc', 'bvid']]):
+            botBroadcast.postEvent(BiliDynamicEvent([MessageChain.create([ImageQQ.fromLocalFile(ImageDownload(dynamicInfo[0], BILI_ASSET_PATH)), Plain(f'来自小加加的视频：\n{dynamicInfo[1]}\nhttps://www.bilibili.com/video/{dynamicInfo[2]}')]), MessageChain.create([Xml(VIDEO_ARTICAL_XML.format(url = f'https://www.bilibili.com/video/{dynamicInfo[2]}', cover = dynamicInfo[0], title = dynamicInfo[1], type = '视频'))])]))
     
 BILI_VERIFY = Verify(Values.BILI_SESSDATA.value, Values.BILI_CSRF.value)
 CACHE_PATH = './cache'
 BILI_ASSET_PATH = f'{CACHE_PATH}/BiliDynamic'
-BILI_DYNAMIC_KEYS = [
-    [['card', 'item', 'description'], ['card', 'item', 'pictures']],
-    [['card', 'item', 'content']],
-    [['card', 'image_urls'], ['card', 'title'], ['card', 'id']],
-    [['card', 'pic'], ['card', 'title'], ['desc', 'bvid']]
-]
-TEXT_IMAGE_PATTERN = [
+TEXT_IMAGE_PATTERN = [regex.compile(pattern) for pattern in [
     '#碧蓝航线# #舰船新增# (.|\n)+',
     '#碧蓝航线# \n(.|\n)+换装(【|「)(.|\n)+(」|】)参上(.|\n)*',
     '#碧蓝航线# \n(.|\n)+(【|「)(.|\n)+(」|】)改造即将开启！(.|\n)*',
     '(.|\n)+<该誓约立绘将于下次维护后实装>(.|\n)*',
     '#碧蓝航线# \n◆Live2D预览◆(.|\n)*',
     '(.|\n)*各位亲爱的指挥官(.|\n)+'
-]
+]]
+VERIFY_PATTERN = regex.compile('^((?!自碧蓝航线上线以来)(.|\n))*$')
+VIDEO_ARTICAL_XML = '<?xml version="1.0" encoding="UTF-8" standalone="yes" ?><msg serviceID="1" templateID="-1" action="web" brief="" sourceMsgId="0" url="{url}" flag="0" adverSign="0" multiMsgFlag="0"><item layout="2" advertiser_id="0" aid="0"><picture cover="{cover}" w="0" h="0" /><title>{title}</title><summary>{type}</summary></item><source name="" icon="" action="" appid="0"/></msg>'
 if not os.path.exists(CACHE_PATH): os.mkdir(CACHE_PATH)
 if not os.path.exists(BILI_ASSET_PATH):
     os.mkdir(BILI_ASSET_PATH)
