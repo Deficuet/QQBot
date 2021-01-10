@@ -66,15 +66,27 @@ class BiliDynamicEvent(BaseEvent):
     class Dispatcher(BaseDispatcher):
         def catch(self, interface: DispatcherInterface) -> Any:
             return
-def GetLastDynamic(uid, verify):
-    while True:
+class GetDynamicThread(threading.Thread):
+    def __init__(self, func, **args):
+        super(GetDynamicThread, self).__init__()
+        self.func = func
+        self.args = args
+        self.result = None
+        self.error = None
+    def run(self):
         try:
-            dynamic = next(user.get_dynamic_g(uid = uid, verify = verify))
+            self.result = next(self.func(**self.args))
         except Exception as e:
-            print(e)
-            time.sleep(5)
-        else:
-            return dynamic
+            self.result = False
+            self.error = e
+def GetLastDynamic(uid, verify):
+    print(tLength := threading.enumerate(), len(tLength))
+    thread = GetDynamicThread(user.get_dynamic_g, uid = uid, verify = verify)
+    thread.start()
+    thread.join(60)
+    if thread.result is False:
+        print(thread.error)
+    return thread.result
 @botBroadcast.receiver(BiliDynamicEvent)
 async def SendDynamic(event: BiliDynamicEvent):
     if isinstance(event.dynamicInfo, list):
@@ -102,23 +114,26 @@ def MonitorDynamic():
     EditConfig(GetDynamicInfo(GetLastDynamic(Values.BILI_USER_ID.value, BILI_VERIFY), [['desc', 'dynamic_id']])[0])
     while True:
         while True:
-            dynamic = GetLastDynamic(Values.BILI_USER_ID.value, BILI_VERIFY)
-            dynamicID = GetDynamicInfo(dynamic, [['desc', 'dynamic_id']])[0]
-            if dynamicID > configs['biliLastDynamicID']:
-                EditConfig(dynamicID)
-                break
-            time.sleep(15)
+            if dynamic := GetLastDynamic(Values.BILI_USER_ID.value, BILI_VERIFY):
+                print('catched')
+                dynamicID = GetDynamicInfo(dynamic, [['desc', 'dynamic_id']])[0]
+                if dynamicID > configs['biliLastDynamicID']:
+                    EditConfig(dynamicID)
+                    break
+            print(f'{type(dynamic)}\n')
+            time.sleep(20)
         if dynamicInfo := GetDynamicInfo(dynamic, [['card', 'item', 'description'], ['card', 'item', 'pictures']]):
             if RegExMultiPattern(TEXT_IMAGE_PATTERN, dynamicInfo[0]):
                 botBroadcast.postEvent(BiliDynamicEvent(MessageChain.create([Plain(dynamicInfo[0])] + [ImageQQ.fromLocalFile(ImageDownload(imgInfo['img_src'], BILI_ASSET_PATH)) for imgInfo in dynamicInfo[1]] + [Plain(f'\n原动态链接：https://t.bilibili.com/{dynamicID}?tab=2')])))
         elif dynamicInfo := GetDynamicInfo(dynamic, [['card', 'item', 'content']]):
-            if VERIFY_PATTERN.match(dynamicInfo[0]):
+            if RegExMultiPattern(TEXT_IMAGE_PATTERN, dynamicInfo[0]):
                 botBroadcast.postEvent(BiliDynamicEvent(MessageChain.create([Plain(f'{dynamicInfo[0]}\n原动态链接：https://t.bilibili.com/{dynamicID}?tab=2')])))
         elif dynamicInfo := GetDynamicInfo(dynamic, [['card', 'image_urls'], ['card', 'title'], ['card', 'id']]):
             botBroadcast.postEvent(BiliDynamicEvent([MessageChain.create([ImageQQ.fromLocalFile(ImageDownload(imgsrc, BILI_ASSET_PATH)) for imgsrc in dynamicInfo[0]] + [Plain(f'来自小加加的专栏：\n{dynamicInfo[1]}\nhttps://www.bilibili.com/read/cv{dynamicInfo[2]}')]), MessageChain.create([Xml(VIDEO_ARTICAL_XML.format(url = f'https://www.bilibili.com/read/cv{dynamicInfo[2]}', cover = dynamicInfo[0][0], title = dynamicInfo[1], type = '专栏'))])]))
         elif dynamicInfo := GetDynamicInfo(dynamic, [['card', 'pic'], ['card', 'title'], ['desc', 'bvid']]):
             botBroadcast.postEvent(BiliDynamicEvent([MessageChain.create([ImageQQ.fromLocalFile(ImageDownload(dynamicInfo[0], BILI_ASSET_PATH)), Plain(f'来自小加加的视频：\n{dynamicInfo[1]}\nhttps://www.bilibili.com/video/{dynamicInfo[2]}')]), MessageChain.create([Xml(VIDEO_ARTICAL_XML.format(url = f'https://www.bilibili.com/video/{dynamicInfo[2]}', cover = dynamicInfo[0], title = dynamicInfo[1], type = '视频'))])]))
-    
+        time.sleep(20)
+
 BILI_VERIFY = Verify(Values.BILI_SESSDATA.value, Values.BILI_CSRF.value)
 CACHE_PATH = './cache'
 BILI_ASSET_PATH = f'{CACHE_PATH}/BiliDynamic'
@@ -128,7 +143,7 @@ TEXT_IMAGE_PATTERN = [regex.compile(pattern) for pattern in [
     '#碧蓝航线# \n(.|\n)+(【|「)(.|\n)+(」|】)改造即将开启！(.|\n)*',
     '(.|\n)+<该誓约立绘将于下次维护后实装>(.|\n)*',
     '#碧蓝航线# \n◆Live2D预览◆(.|\n)*',
-    '(.|\n)*各位亲爱的指挥官(.|\n)+'
+    '(.|\n)*(各位亲爱的指挥官|◆强制更新维护注意◆)(.|\n)+'
 ]]
 VERIFY_PATTERN = regex.compile('^((?!自碧蓝航线上线以来)(.|\n))*$')
 VIDEO_ARTICAL_XML = '<?xml version="1.0" encoding="UTF-8" standalone="yes" ?><msg serviceID="1" templateID="-1" action="web" brief="" sourceMsgId="0" url="{url}" flag="0" adverSign="0" multiMsgFlag="0"><item layout="2" advertiser_id="0" aid="0"><picture cover="{cover}" w="0" h="0" /><title>{title}</title><summary>{type}</summary></item><source name="" icon="" action="" appid="0"/></msg>'
